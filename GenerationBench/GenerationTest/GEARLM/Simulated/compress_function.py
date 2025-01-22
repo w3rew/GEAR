@@ -429,6 +429,7 @@ def compress_insert_function(
     qbase2=None,
     prefill=None,
 ):
+    dtype = previous_key.dtype
     batch, num_head, seq_len, sep_dim = previous_key.shape
     if compress_config.token_preserving[layer_idx] == True:
         starting_idx = int(compress_config.start_saving[layer_idx] * seq_len)
@@ -571,7 +572,7 @@ def compress_insert_function(
             compress_config.loop[layer_idx],
             
             
-        )
+        ).to(dtype)
         previous_value = tokenwise_gearlkivi_tokenQ(
             previous_value,
             compress_config.quantize_bit[layer_idx],
@@ -579,7 +580,8 @@ def compress_insert_function(
             rankv_used,
             compress_config.loop[layer_idx],
             
-        )
+        ).to(dtype)
+        assert dtype == torch.bfloat16
 
     return previous_key, previous_value
 

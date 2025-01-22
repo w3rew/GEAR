@@ -39,13 +39,13 @@ decompress_function = {
 
 class StreamCompressedUnion:
     def __init__(self, compress_kwargs: Optional[Dict[str, Any]] = None):
-        self.quantize_bit = compress_kwargs["quantize_bit"]
-        self.compress_mode = compress_kwargs["compress_mode"]
+        self.quantize_bit = compress_kwargs.quantize_bit
+        self.compress_mode = compress_kwargs.compress_mode
         self.min = None
         self.step = None
-        self.left = compress_kwargs["left"]
-        self.rank = compress_kwargs["rank"]
-        self.loop = compress_kwargs["loop"]
+        self.left = compress_kwargs.left
+        self.rank = compress_kwargs.rank
+        self.loop = compress_kwargs.loop
         self.dtype = None
         self.shape = None
         self.is_compressed = False
@@ -55,7 +55,7 @@ class StreamCompressedUnion:
         self.p_base = None
         self.q_base = None
         self.counter = 0
-        self.gap = compress_kwargs["streaming_gap"]
+        self.gap = compress_kwargs.streaming_gap
         self.cache_shape = None
         self.buffer = None
         self.cache_shape = None

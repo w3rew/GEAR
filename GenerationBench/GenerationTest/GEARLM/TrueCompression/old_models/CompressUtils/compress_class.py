@@ -57,17 +57,17 @@ def detect_infnan(input_tensor, string):
 
 class CompressUnion:
     def __init__(self, compress_kwargs: Optional[Dict[str, Any]] = None):
-        self.quantize_bit = compress_kwargs["quantize_bit"]
-        self.compress_mode = compress_kwargs["compress_mode"]
+        self.quantize_bit = compress_kwargs.quantize_bit
+        self.compress_mode = compress_kwargs.compress_mode
         self.min = None
         self.step = None
         self.min_p = None
         self.min_q = None
         self.step_p = None
         self.step_q = None
-        self.left = compress_kwargs["left"]
-        self.rank = compress_kwargs["rank"]
-        self.loop = compress_kwargs["loop"]
+        self.left = compress_kwargs.left
+        self.rank = compress_kwargs.rank
+        self.loop = compress_kwargs.loop
         self.dtype = None
         self.shape = None
         self.shape_p = None
@@ -78,9 +78,9 @@ class CompressUnion:
         self.p_base = None
         self.q_base = None
         self.counter = 0
-        self.streaming_gap = compress_kwargs["streaming_gap"]
+        self.streaming_gap = compress_kwargs.streaming_gap
         self.buffer = None
-        self.streaming = compress_kwargs["stream"]
+        self.streaming = compress_kwargs.stream
         self.seq_length = 0
         self.input_shape = 0
 

@@ -52,6 +52,7 @@ class CompressionConfig(dict):
         self.streaming = streaming
         self.streaming_gap = streaming_gap
         self.stream_grouping = stream_grouping
+        self.copy_for_all_attention()
 
 
     def create_attention_config(self, config):
