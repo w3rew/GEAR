@@ -842,8 +842,6 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states, key_states, cos, sin
         )
         bsz, num_heads, q_len, head_dim = query_states.shape
-        if q_len > 1:
-            self.prefill = True
         if past_key_value is not None:
             # TODO : add compress_config and compress functions
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -854,84 +852,42 @@ class LlamaSdpaAttention(LlamaAttention):
                     else:
                         past_key, past_value = key_states, value_states
                     bsz, num_heads, seq_len, head_dim = past_key.shape
+
+                    # key_states_new, value_states_new = compress_insert_function(key_states, value_states,
+                    #                                                     self.compress_config,
+                    #                                                     self.layer_idx,
+                    #                                                     pbase1=self.pbase1,
+                    #                                                     pbase2=self.pbase2,
+                    #                                                     qbase1=self.qbase1,
+                    #                                                     qbase2=self.qbase2
+                    #                                                 )
+                    # key_states, value_states = key_states_new.to(key_states.dtype), value_states_new.to(value_states.dtype)
+
+                    key_states, value_states = past_key_value.update(
+                        key_states, value_states, self.layer_idx, cache_kwargs
+                    )
+
                     if (
                         self.prefill is True
                         or seq_len % self.compress_config.streaming_gap[self.layer_idx]
                         == 0
                     ):
-                        if self.compress_config.stream_grouping[self.layer_idx] == True:
-                            bsz, num_heads, seq_len, head_dim = past_key.shape
-                            if self.prefill is True:
-                                residual_length = seq_len % self.compress_config.streaming_gap[
-                                    self.layer_idx
-                                ]
-                                past_key_compress = past_key[:,:,0:seq_len - residual_length:,:]
-                                past_value_compress = past_value[:,:,0:seq_len - residual_length:,:]
-                                if residual_length == 0:
-                                    past_key_full = None
-                                    past_value_full = None
-                                else:
-                                    past_key_full = past_key[:,:, -residual_length:,:]
-                                    past_value_full = past_value[:,:, -residual_length:,:]
-                            else:
-                                residual_length = self.compress_config.streaming_gap[self.layer_idx]
-                                past_key_compress = past_key[:,:, -residual_length:,:]
-                                past_value_compress = past_value[:,:, -residual_length:,:]
-                                past_key_full = past_key[:,:, 0:-residual_length:,:]
-                                past_value_full = past_value[:,:, 0:-residual_length:,:]
-                            (past_key_compress, past_value_compress) = compress_insert_function(
-                                past_key_compress,
-                                past_value_compress,
-                                self.compress_config,
-                                self.layer_idx,
-                                pbase1=self.pbase1,
-                                qbase1=self.qbase1,
-                                pbase2=self.pbase2,
-                                qbase2=self.qbase2,
-                                prefill = self.prefill,
-                            )
-                            if past_key_full is not None:
-                                if self.prefill is True:
-                                    past_key = torch.cat([past_key_compress, past_key_full], dim=2)
-                                    past_value = torch.cat([past_value_compress, past_value_full], dim=2)
-                                else:
-                                    past_key = torch.cat([past_key_full, past_key_compress], dim=2)
-                                    past_value = torch.cat([past_value_full, past_value_compress], dim=2)
-                        else:
-                            if self.compress_config.compress_method[self.layer_idx] == "KIVI":
-                                bsz, num_heads, seq_len, head_dim = past_key.shape
-                                fixed_length = seq_len // self.compress_config.group_size[
-                                    self.layer_idx
-                                ] * self.compress_config.group_size[self.layer_idx]
-                                residual_key = past_key[:, :, fixed_length:, :]
-                                residual_value = past_value[:, :, fixed_length:, :]
-                                past_key, past_value = past_key[:,:,:fixed_length,:], past_value[:,:,:fixed_length,:]
-                            # not streaming compress is compress every geneartion
-                            (
-                                past_key,
-                                past_value,
-                            ) = compress_insert_function(
-                                past_key,
-                                past_value,
-                                self.compress_config,
-                                self.layer_idx,
-                                pbase1=self.pbase1,
-                                qbase1=self.qbase1,
-                                pbase2=self.pbase2,
-                                qbase2=self.qbase2,
-                            )
-                            if self.compress_config.compress_method[self.layer_idx] == "KIVI":
-                                past_key = torch.cat([past_key, residual_key], dim=2)
-                                past_value = torch.cat([past_value, residual_value], dim=2)
-                        if self.prefill is False:
-                            past_key_value.__setitem__(
-                                self.layer_idx, (past_key, past_value)
-                            )
-                        self.prefill = False
-
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+                        (
+                            key_states_new,
+                            value_states_new,
+                        ) = compress_insert_function(
+                            key_states,
+                            value_states,
+                            self.compress_config,
+                            self.layer_idx,
+                            pbase1=self.pbase1,
+                            qbase1=self.qbase1,
+                            pbase2=self.pbase2,
+                            qbase2=self.qbase2,
+                        )
+                        key_states, value_states = key_states_new.to(key_states.dtype), value_states_new.to(value_states.dtype)
+                        past_key_value.key_cache[self.layer_idx] = key_states
+                        past_key_value.value_cache[self.layer_idx] = value_states
  
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -1256,10 +1212,8 @@ class LlamaModel(LlamaPreTrainedModel):
                 use_cache = False
 
         past_key_values_length = 0
+        use_legacy_cache = False
         if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if position_ids is None:
